@@ -1,0 +1,12 @@
+version: '3'
+services:
+  django-csv-test:
+    image: django-csv-test:latest
+    user: root
+    container_name: django-csv-test
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SETTINGS_MODULE: django_csv_test.settings
+    volumes:
+      - ../django_csv_test:/var/django/django_csv_test
