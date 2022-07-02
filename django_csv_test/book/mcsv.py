@@ -30,8 +30,7 @@ class BookCsv(ModelCsv):
 
 class BookWithPublisherCsv(ModelCsv):
     publisher = PublisherCsv.as_part(
-        field_name='publisher', model=Publisher,
-        callback='get_or_create_object'
+        field_name='publisher', callback='get_or_create_object'
     )
 
     name = publisher.AttributeColumn(header='name', attr_name='name')

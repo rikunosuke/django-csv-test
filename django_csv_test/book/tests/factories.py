@@ -22,7 +22,7 @@ class PublisherFactory(factory.django.DjangoModelFactory):
         'New York City, U.S',
         'Toronto, Canada',
         'Rio de Janeiro, Brasil',
-        'Buenos Aires, Argentine'
+        'Buenos Aires, Argentine',
         'Warsaw, Poland',
         'London, U.K',
         'Cape Town, South Africa',
@@ -41,7 +41,7 @@ class BookFactory(factory.django.DjangoModelFactory):
         model = Book
 
     title = factory.Sequence(lambda i: f'title {i}')
-    price = factory.LazyAttribute(lambda _: random.randrange(400, 10000))  # yen
+    price = factory.LazyAttribute(lambda _: random.randrange(400, 10000))
     publisher = factory.SubFactory(PublisherFactory)
     is_on_sale = factory.LazyFunction(random_tf)
     description = factory.Faker('text')
