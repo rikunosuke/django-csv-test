@@ -59,7 +59,7 @@ class ModelCsvForWriteTest(TestCase):
     def test_customize_column(self):
         class CustomizeBookCsv(ModelCsv):
             pk = columns.AttributeColumn(header='primary key')
-            is_on_sale = columns.AttributeColumn(header='now on sale')
+            is_on_sale = columns.AttributeColumn(header='now on sale', to=bool)
             title = columns.AttributeColumn(header='custom title')
 
             class Meta:
@@ -142,7 +142,9 @@ class ModelCsvForWriteTest(TestCase):
         for obj, row in zip(self.all_queryset, table):
             with self.subTest():
                 self.assertListEqual(
-                    row, [obj.title, obj.publisher.name, obj.publisher.headquarter])
+                    row,
+                    [obj.title, obj.publisher.name, obj.publisher.headquarter]
+                )
 
     def test_part_default_use(self, **kwargs):
         class PublisherCsv(ModelCsv):
@@ -179,4 +181,5 @@ class ModelCsvForWriteTest(TestCase):
         for obj, row in zip(self.all_queryset, table):
             city, country = obj.publisher.headquarter.split(',')
             self.assertListEqual(
-                row, [obj.title, obj.publisher.name, city, country])
+                row, [obj.title, obj.publisher.name, city, country]
+            )
