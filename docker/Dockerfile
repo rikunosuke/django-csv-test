@@ -6,7 +6,7 @@ RUN apk --no-cache add \
     python3 \
     python3-dev \
     py3-pip \
-    && pip3 install pipenv --ignore-installed distlib
+    && pip3 install pipenv --ignore-installed six distlib
 
 WORKDIR /tmp
 RUN pipenv lock \

@@ -50,7 +50,9 @@ class ModelCsvForWriteTest(TestCase):
                 if isinstance(val, bool):
                     val = 'yes' if val else 'no'
                 if isinstance(val, datetime):
-                    val = val.strftime(BookCsv._meta.datetime_format)
+                    val = val.astimezone(
+                        BookCsv._meta.tzinfo).strftime(
+                        BookCsv._meta.datetime_format)
                 else:
                     val = str(val)
 
