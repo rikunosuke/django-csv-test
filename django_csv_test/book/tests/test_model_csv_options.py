@@ -4,10 +4,10 @@ from book.models import Book
 from django_csv.mcsv.metaclasses import ModelOptions
 
 
-class ModelCsvTest(TestCase):
+class ModelCsvOptionTest(TestCase):
     def test_model_csv_options(self):
         meta = type('Meta', (), {'model': Book, 'fields': '__all__'})
-        opt = ModelOptions(meta=meta, columns={}, parts=[], model=Book)
+        opt = ModelOptions(meta=meta, columns={}, parts=[])
         self.assertEqual(len(opt.columns), 6)
         self.assertSetEqual(
             set(col.get_w_index(original=True) for col in opt.columns),
@@ -31,5 +31,5 @@ class ModelCsvTest(TestCase):
 
         # ModelOptions for Part does not have columns.
         part_meta = type('Meta', (), {'model': Book, 'as_part': True})
-        part_opt = ModelOptions(meta=part_meta, columns={}, parts=[], model=Book)
+        part_opt = ModelOptions(meta=part_meta, columns={}, parts=[])
         self.assertEqual(len(part_opt.columns), 0)

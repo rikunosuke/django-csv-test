@@ -10,7 +10,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         User = get_user_model()
         if not User.objects.filter(is_superuser=True).exists():
-            User.objects.create_superuser('admin', 'admin@example.com', 'pass')
+            User.objects.create_superuser(
+                'admin', 'admin@example.com', 'password')
 
         Author.objects.all().delete()
         Book.objects.all().delete()

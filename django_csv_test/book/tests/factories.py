@@ -30,6 +30,7 @@ class PublisherFactory(factory.django.DjangoModelFactory):
         'Sydney, Australia',
         'Auckland, New Zealand',
     ])
+    registered_by_id = 1
 
 
 def random_tf():

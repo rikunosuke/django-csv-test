@@ -1,5 +1,9 @@
+from django.contrib.auth import get_user_model
+
 from django_csv import ModelCsv, columns
 from book.models import Book, Publisher
+
+User = get_user_model()
 
 
 class PublisherCsv(ModelCsv):
@@ -7,10 +11,11 @@ class PublisherCsv(ModelCsv):
     name = columns.AttributeColumn(header='Publisher Name')
     country = columns.MethodColumn(header='Country')
     city = columns.MethodColumn(header='City')
+    registered_by = columns.MethodColumn(header='Registered BY')
 
     class Meta:
-        auto_assign = True
         model = Publisher
+        auto_assign = True
 
     def column_country(self, instance: Publisher, **kwargs) -> str:
         return instance.headquarter.split(',')[1]
@@ -18,8 +23,15 @@ class PublisherCsv(ModelCsv):
     def column_city(self, instance: Publisher, **kwargs) -> str:
         return instance.headquarter.split(',')[0]
 
+    def column_registered_by(self, instance: Publisher, **kwargs) -> str:
+        return instance.registered_by.username
+
     def field_headquarter(self, values: dict, **kwargs) -> dict:
         return values['country'] + ',' + values['city']
+
+    def field_registered_by(self, values: dict, **kwargs):
+        user, _ = User.objects.get_or_create(username=values['registered_by'])
+        return user
 
 
 class BookCsv(ModelCsv):
@@ -30,13 +42,19 @@ class BookCsv(ModelCsv):
 
 
 class BookWithPublisherCsv(ModelCsv):
-    publisher = PublisherCsv.as_part(
+    pbl = PublisherCsv.as_part(
         field_name='publisher', callback='get_or_create_object'
     )
 
-    pbl_name = publisher.AttributeColumn(header='Publisher', attr_name='name')
-    pbl_country = publisher.MethodColumn(header='Country', attr_name='country')
-    pbl_city = publisher.MethodColumn(header='City', attr_name='city')
+    pbl_name = pbl.AttributeColumn(header='Publisher', attr_name='name')
+    pbl_country = pbl.MethodColumn(
+        header='Country', method_suffix='country', value_name='country')
+    pbl_city = pbl.MethodColumn(
+        header='City', method_suffix='city', value_name='city')
+    pbl_registered_by = pbl.MethodColumn(
+        header='Registered BY', method_suffix='registered_by',
+        value_name='registered_by'
+    )
 
     class Meta:
         model = Book

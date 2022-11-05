@@ -8,10 +8,10 @@ from django_csv.admin.mixins import ModelCsvAdminMixin
 @admin.register(Book)
 class BookAdmin(ModelCsvAdminMixin, admin.ModelAdmin):
     csv_class = BookWithPublisherCsv
-    csv_name = 'book'
+    file_name = 'book'
 
 
 @admin.register(Publisher)
 class PublisherAdmin(ModelCsvAdminMixin, admin.ModelAdmin):
     csv_class = PublisherCsv
-    csv_name = 'publisher'
+    file_name = 'publisher'

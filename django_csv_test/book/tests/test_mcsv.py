@@ -1,15 +1,21 @@
 import random
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from book.models import Book, Author, Publisher
 from book.tests.factories import AuthorFactory, BookFactory
 from django_csv import ModelCsv, columns
+from django_csv.columns import ColumnValidationError
 
 
 class ModelCsvForWriteTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        User = get_user_model()
+        User.objects.create_user(username='admin', password='password')
+
         AuthorFactory.create_batch(10)
         author_list = list(Author.objects.all())
         for _ in range(50):
@@ -69,7 +75,7 @@ class ModelCsvForWriteTest(TestCase):
                 auto_assign = True
 
         for_write = CustomizeBookCsv.for_write(
-            queryset=self.all_queryset)
+            instances=self.all_queryset)
         table = for_write.get_table()
         self.assertListEqual(table[0], ['primary key', 'now on sale', 'custom title'])
 
@@ -86,7 +92,7 @@ class ModelCsvForWriteTest(TestCase):
                 auto_assign = True
 
         only_title_for_write = OnlyTitleBookCsv.for_write(
-            queryset=self.all_queryset)
+            instances=self.all_queryset)
 
         for obj, row in zip(self.all_queryset,
                             only_title_for_write.get_table(header=False)):
@@ -99,7 +105,7 @@ class ModelCsvForWriteTest(TestCase):
                 model = Book
                 auto_assign = True
 
-        for_write = TitleAndPriceBookCsv.for_write(queryset=self.all_queryset)
+        for_write = TitleAndPriceBookCsv.for_write(instances=self.all_queryset)
         for row, obj in zip(for_write.get_table(header=False),
                             self.all_queryset):
             self.assertListEqual(row, [obj.title, str(obj.price)])
@@ -123,13 +129,13 @@ class ModelCsvForWriteTest(TestCase):
         self.assertEqual(price_column.get_r_index(), 1)
         self.assertEqual(price_column.get_r_index(original=True), 1)
 
-        for_write = BookCsv.for_write(queryset=self.all_queryset)
+        for_write = BookCsv.for_write(instances=self.all_queryset)
         for row, obj in zip(for_write.get_table(header=False),
                             self.all_queryset):
             self.assertListEqual(
                 row, ['yes' if obj.is_on_sale else 'no', str(obj.price), obj.title])
 
-    def test_foreign_part_without_part(self):
+    def test_foreign_key_only_write(self):
         class BookCsv(ModelCsv):
             title = columns.AttributeColumn()
             publisher__name = columns.AttributeColumn()
@@ -139,7 +145,7 @@ class ModelCsvForWriteTest(TestCase):
                 model = Book
                 auto_assign = True
 
-        for_write = BookCsv.for_write(queryset=self.all_queryset)
+        for_write = BookCsv.for_write(instances=self.all_queryset)
         table = for_write.get_table(header=False)
         for obj, row in zip(self.all_queryset, table):
             with self.subTest():
@@ -150,9 +156,6 @@ class ModelCsvForWriteTest(TestCase):
 
     def test_part_default_use(self, **kwargs):
         class PublisherCsv(ModelCsv):
-            name = columns.AttributeColumn()
-            city = columns.MethodColumn()
-            country = columns.MethodColumn()
 
             class Meta:
                 model = Publisher
@@ -169,19 +172,178 @@ class ModelCsvForWriteTest(TestCase):
         class BookCsv(ModelCsv):
             title = columns.AttributeColumn()
 
-            pbl_part = PublisherCsv.as_part(field_name='publisher')
-            pbl_name = pbl_part.AttributeColumn(attr_name='name')
-            pbl_city = pbl_part.MethodColumn(attr_name='city')
-            pbl_country = pbl_part.MethodColumn(attr_name='country')
+            prt = PublisherCsv.as_part(field_name='publisher')
+            pbl_name = prt.AttributeColumn(attr_name='name')
+            pbl_city = prt.MethodColumn(
+                method_suffix='city', value_name='city')
+            pbl_country = prt.MethodColumn(
+                method_suffix='country', value_name='country')
+            pbl_registered_by_id = prt.StaticColumn(
+                static_value=1, value_name='registered_by_id', to=int)
 
             class Meta:
                 model = Book
                 auto_assign = True
 
-        for_write = BookCsv.for_write(queryset=self.all_queryset)
+        for_write = BookCsv.for_write(instances=self.all_queryset)
         table = for_write.get_table(header=False)
         for obj, row in zip(self.all_queryset, table):
             city, country = obj.publisher.headquarter.split(',')
             self.assertListEqual(
-                row, [obj.title, obj.publisher.name, city, country]
+                row, [obj.title, obj.publisher.name, city, country, '1']
+            )
+
+        for_read = BookCsv.for_read(table=table)
+        pbl_cnt = Publisher.objects.count()
+        with self.subTest():
+            for obj, d in zip(self.all_queryset, for_read.get_as_dict()):
+                self.assertSetEqual(set(d.keys()), {'title', 'publisher'})
+                self.assertEqual(obj.publisher, d['publisher'])
+
+        # default is 'get_or_create' so the count of publishers doesn't change.
+        self.assertEqual(pbl_cnt, Publisher.objects.count())
+
+    def test_part_column_validation(self):
+        class PublisherCsv(ModelCsv):
+            class Meta:
+                model = Publisher
+
+        class MethodColumnInvalidCsv(ModelCsv):
+            part = PublisherCsv.as_part(field_name='publisher')
+            pbl_name = part.AttributeColumn(attr_name='name')
+            pbl_country = part.MethodColumn()  # ColumnValidationError
+
+            class Meta:
+                model = Book
+                auto_assign = True
+
+        with self.assertRaises(ColumnValidationError):
+            MethodColumnInvalidCsv.for_read(table=[['', '']])
+
+        with self.assertRaises(ColumnValidationError):
+            MethodColumnInvalidCsv.for_write(instances=self.all_queryset)
+
+        class MethodColumnValidCsv(ModelCsv):
+            part = PublisherCsv.as_part(field_name='publisher')
+            pbl_name = part.AttributeColumn(attr_name='name')
+            pbl_count = part.MethodColumn(
+                value_name='country', method_suffix='country')
+
+            class Meta:
+                model = Book
+                auto_assign = True
+
+        try:
+            MethodColumnValidCsv.for_read(table=[['', '']])
+        except ColumnValidationError as e:
+            self.fail(
+                '`ColumnValidationError` is raised unexpectedly. ' + str(e))
+
+        try:
+            MethodColumnValidCsv.for_write(instances=self.all_queryset)
+        except ColumnValidationError as e:
+            self.fail(
+                '`ColumnValidationError` is raised unexpectedly. ' + str(e))
+
+        class StaticColumnInvalidCsv(ModelCsv):
+            part = PublisherCsv.as_part(field_name='publisher')
+            pbl_name = part.AttributeColumn(attr_name='name')
+            pbl_created_by = part.StaticColumn()
+
+            class Meta:
+                model = Book
+                auto_assign = True
+
+        with self.assertRaises(ColumnValidationError):
+            StaticColumnInvalidCsv.for_read(table=[['', '']])
+
+        try:
+            StaticColumnInvalidCsv.for_write(instances=self.all_queryset)
+        except ColumnValidationError as e:
+            self.fail('`ColumnValidationError` is raised unexpectedly. ' + str(e))
+
+        class StaticColumnValidCsv(ModelCsv):
+            part = PublisherCsv.as_part(field_name='publisher')
+            pbl_name = part.AttributeColumn(attr_name='name')
+            pbl_created_by = part.StaticColumn(value_name='created_by')
+
+            class Meta:
+                model = Book
+                auto_assign = True
+
+        try:
+            StaticColumnValidCsv.for_read(table=[['', '']])
+        except ColumnValidationError as e:
+            self.fail(
+                '`ColumnValidationError` is raised unexpectedly. ' + str(e))
+
+        try:
+            StaticColumnValidCsv.for_write(instances=self.all_queryset)
+        except ColumnValidationError as e:
+            self.fail(
+                '`ColumnValidationError` is raised unexpectedly. ' + str(e))
+
+    def test_method_suffix(self):
+        class PublisherPart(ModelCsv):
+            class Meta:
+                model = Publisher
+
+            def column_name(self, instance: Publisher, **kwargs):
+                # column_<attr_name> is called. Not column_<var name>
+                return 'pbl:' + instance.name
+
+            def column_suffix(self, instance: Publisher, **kwargs):
+                return 'suffix:' + instance.name
+
+        class BookCsv(ModelCsv):
+            book_name = columns.AttributeColumn(attr_name='name')
+            # columns which have same attr_name ↑↓ does not cause conflict.
+            part = PublisherPart.as_part(field_name='publisher')
+            pbl_name = part.AttributeColumn(attr_name='name')
+            suffix_test = part.MethodColumn(method_suffix='suffix')
+
+            class Meta:
+                model = Book
+                auto_assign = True
+                read_mode = False
+
+        for_write = BookCsv.for_write(instances=self.all_queryset)
+        table = for_write.get_table()
+        self.assertListEqual(['book_name', 'pbl_name', 'suffix_test'], table[0])
+        for obj, row in zip(self.all_queryset, table[1:]):
+            with self.subTest():
+                self.assertListEqual(
+                    [obj.name, f'pbl:{obj.publisher.name}', f'suffix:{obj.publisher.name}'],
+                    row
+                )
+
+    def test_tz_meta_option(self):
+        class JSTTimeZoneCsv(ModelCsv):
+            class Meta:
+                model = Book
+                fields = ['created_at']
+
+        for_write = JSTTimeZoneCsv.for_write(instances=self.all_queryset)
+        table = for_write.get_table(header=False)
+        for obj, row in zip(self.all_queryset, table):
+            with self.subTest():
+                # timezone is jst
+                jst_created_at = obj.created_at + timedelta(hours=9)
+                self.assertEqual(
+                    jst_created_at.strftime(for_write._meta.datetime_format),
+                    row[0]
+                )
+
+        class UTCTimeZoneCsv(ModelCsv):
+            class Meta:
+                model = Book
+                fields = ['created_at']
+                tzinfo = timezone.utc
+
+        for_write = UTCTimeZoneCsv.for_write(instances=self.all_queryset)
+        table = for_write.get_table(header=False)
+        for obj, row in zip(self.all_queryset, table):
+            self.assertEqual(
+                obj.created_at.strftime(for_write._meta.datetime_format),
+                row[0]
             )
