@@ -1,19 +1,23 @@
 import random
 from datetime import datetime, timezone, timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from book.models import Book, Author, Publisher
 from book.tests.factories import AuthorFactory, BookFactory
-from django_csv import ModelCsv, columns
-from django_csv.columns import ColumnValidationError
+from django_csv.model_csv import ModelCsv, ValidationError
+from django_csv.model_csv import columns
+from django_csv.model_csv.columns import ColumnValidationError
+
+
+User = get_user_model()
 
 
 class ModelCsvForWriteTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        User = get_user_model()
         User.objects.create_user(username='admin', password='password')
 
         AuthorFactory.create_batch(10)
@@ -63,6 +67,17 @@ class ModelCsvForWriteTest(TestCase):
                     val = str(val)
 
                 self.assertEqual(val, row[x])
+
+    def test_headers(self):
+        class BookCsv(ModelCsv):
+            class Meta:
+                model = Book
+                fields = ['title', 'price']
+                headers = {'title': 'Book Title', 'price': 'Book Price'}
+
+        for_write = BookCsv.for_write(instances=[[0]])
+        headers = for_write._meta.get_headers(for_write=True)
+        self.assertEqual(headers, ['Book Title', 'Book Price'])
 
     def test_customize_column(self):
         class CustomizeBookCsv(ModelCsv):
@@ -172,7 +187,7 @@ class ModelCsvForWriteTest(TestCase):
         class BookCsv(ModelCsv):
             title = columns.AttributeColumn()
 
-            prt = PublisherCsv.as_part(field_name='publisher')
+            prt = PublisherCsv.as_part(related_name='publisher')
             pbl_name = prt.AttributeColumn(attr_name='name')
             pbl_city = prt.MethodColumn(
                 method_suffix='city', value_name='city')
@@ -194,9 +209,10 @@ class ModelCsvForWriteTest(TestCase):
             )
 
         for_read = BookCsv.for_read(table=table)
+        self.assertTrue(for_read.is_valid())
         pbl_cnt = Publisher.objects.count()
         with self.subTest():
-            for obj, d in zip(self.all_queryset, for_read.get_as_dict()):
+            for obj, d in zip(self.all_queryset, for_read.cleaned_rows):
                 self.assertSetEqual(set(d.keys()), {'title', 'publisher'})
                 self.assertEqual(obj.publisher, d['publisher'])
 
@@ -209,7 +225,7 @@ class ModelCsvForWriteTest(TestCase):
                 model = Publisher
 
         class MethodColumnInvalidCsv(ModelCsv):
-            part = PublisherCsv.as_part(field_name='publisher')
+            part = PublisherCsv.as_part(related_name='publisher')
             pbl_name = part.AttributeColumn(attr_name='name')
             pbl_country = part.MethodColumn()  # ColumnValidationError
 
@@ -224,7 +240,7 @@ class ModelCsvForWriteTest(TestCase):
             MethodColumnInvalidCsv.for_write(instances=self.all_queryset)
 
         class MethodColumnValidCsv(ModelCsv):
-            part = PublisherCsv.as_part(field_name='publisher')
+            part = PublisherCsv.as_part(related_name='publisher')
             pbl_name = part.AttributeColumn(attr_name='name')
             pbl_count = part.MethodColumn(
                 value_name='country', method_suffix='country')
@@ -246,7 +262,7 @@ class ModelCsvForWriteTest(TestCase):
                 '`ColumnValidationError` is raised unexpectedly. ' + str(e))
 
         class StaticColumnInvalidCsv(ModelCsv):
-            part = PublisherCsv.as_part(field_name='publisher')
+            part = PublisherCsv.as_part(related_name='publisher')
             pbl_name = part.AttributeColumn(attr_name='name')
             pbl_created_by = part.StaticColumn()
 
@@ -263,7 +279,7 @@ class ModelCsvForWriteTest(TestCase):
             self.fail('`ColumnValidationError` is raised unexpectedly. ' + str(e))
 
         class StaticColumnValidCsv(ModelCsv):
-            part = PublisherCsv.as_part(field_name='publisher')
+            part = PublisherCsv.as_part(related_name='publisher')
             pbl_name = part.AttributeColumn(attr_name='name')
             pbl_created_by = part.StaticColumn(value_name='created_by')
 
@@ -298,7 +314,7 @@ class ModelCsvForWriteTest(TestCase):
         class BookCsv(ModelCsv):
             book_name = columns.AttributeColumn(attr_name='name')
             # columns which have same attr_name ↑↓ does not cause conflict.
-            part = PublisherPart.as_part(field_name='publisher')
+            part = PublisherPart.as_part(related_name='publisher')
             pbl_name = part.AttributeColumn(attr_name='name')
             suffix_test = part.MethodColumn(method_suffix='suffix')
 
@@ -318,6 +334,8 @@ class ModelCsvForWriteTest(TestCase):
                 )
 
     def test_tz_meta_option(self):
+        settings.TIME_ZONE = 'Asia/Tokyo'
+
         class JSTTimeZoneCsv(ModelCsv):
             class Meta:
                 model = Book
@@ -334,6 +352,13 @@ class ModelCsvForWriteTest(TestCase):
                     row[0]
                 )
 
+        for_read = JSTTimeZoneCsv.for_read(table=[['2022-10-01 00:00:00']])
+        self.assertTrue(for_read.is_valid())
+        row = list(for_read.cleaned_rows)[0]
+        self.assertEqual(
+            row['created_at'], datetime(2022, 9, 30, 15, tzinfo=timezone.utc)
+        )
+
         class UTCTimeZoneCsv(ModelCsv):
             class Meta:
                 model = Book
@@ -347,3 +372,111 @@ class ModelCsvForWriteTest(TestCase):
                 obj.created_at.strftime(for_write._meta.datetime_format),
                 row[0]
             )
+
+        for_read = UTCTimeZoneCsv.for_read(table=[['2022-10-01 00:00:00']])
+        self.assertTrue(for_read.is_valid())
+        row = list(for_read.cleaned_rows)[0]
+        self.assertEqual(
+            row['created_at'], datetime(2022, 10, 1, tzinfo=timezone.utc)
+        )
+
+    def test_decorator(self):
+        class PublisherCsv(ModelCsv):
+            pk = columns.AttributeColumn(header='id', attr_name='id')
+            name = columns.AttributeColumn(header='Publisher Name')
+
+            class Meta:
+                model = Publisher
+                auto_assign = True
+
+            @columns.as_column(header='Country')
+            def country(self, instance: Publisher, **kwargs) -> str:
+                return instance.headquarter.split(',')[0]
+
+            @columns.as_column(header='City')
+            def city(self, instance: Publisher, **kwargs):
+                return instance.headquarter.split(',')[1]
+
+            @columns.as_column(header='registered_by')
+            def registered_by(self, instance: Publisher, **kwargs) -> str:
+                return instance.registered_by.username
+
+        publishers = Publisher.objects.all()
+        mcsv = PublisherCsv.for_write(instances=publishers)
+        for publisher, row in zip(publishers, mcsv.get_table(header=False)):
+            self.assertEqual(str(publisher.pk), row[0])
+            self.assertEqual(publisher.name, row[1])
+            country, city = publisher.headquarter.split(',')
+            self.assertEqual(country, row[2])
+            self.assertEqual(city, row[3])
+            self.assertEqual(publisher.registered_by.username, row[4])
+
+    def test_validation(self):
+        HEADQUARTER_CHOICES = [
+            'Tokyo, Japan',
+            'Seoul, North Korea',
+            'New York City, U.S',
+            'Toronto, Canada',
+            'Rio de Janeiro, Brasil',
+            'Buenos Aires, Argentine',
+            'Warsaw, Poland',
+            'London, U.K',
+            'Cape Town, South Africa',
+            'Accra, Ghana',
+            'Sydney, Australia',
+            'Auckland, New Zealand',
+        ]
+
+        class MustNotBeRaisedError(Exception):
+            pass
+
+        class PublisherCsv(ModelCsv):
+            class Meta:
+                model = Publisher
+
+            def field_headquarter(self, values: dict, **kwargs) -> str:
+                headquarter = ', '.join([values['city'], values['country']])
+                if headquarter not in HEADQUARTER_CHOICES:
+                    raise ValidationError(f'{headquarter} is not in choices.')
+                return headquarter
+
+            def field(self, values: dict, **kwargs) -> dict:
+                if values['city'] == 'osaka':
+                    raise MustNotBeRaisedError('`field` must not be called')
+                return values
+
+        class BookCsv(ModelCsv):
+            prt = PublisherCsv.as_part(related_name='publisher')
+            prt_name = prt.AttributeColumn(attr_name='name')
+            prt_city = prt.MethodColumn(value_name='city')
+            prt_country = prt.MethodColumn(value_name='country')
+
+            class Meta:
+                model = Book
+                auto_assign = True
+
+        publishers = Publisher.objects.all()
+        table = [[pbl.name, pbl.city, pbl.country] for pbl in publishers]
+
+        mcsv = BookCsv.for_read(table=table)
+        self.assertTrue(mcsv.is_valid())
+        for row in mcsv.cleaned_rows:
+            self.assertIn('publisher', row)
+
+        invalid_table = table + [['SHUEISHA', 'osaka', 'Japan']]
+        mcsv = BookCsv.for_read(table=invalid_table)
+        try:
+            self.assertFalse(mcsv.is_valid())
+        except MustNotBeRaisedError as e:
+            self.fail(str(e))
+
+        self.assertEqual(len(mcsv.cleaned_rows), publishers.count() + 1)
+        for i, row in enumerate(mcsv.cleaned_rows):
+            if row.is_valid:
+                continue
+
+            self.assertEqual(row.number, i)
+            self.assertEqual(len(row.errors), 1)
+            self.assertEqual(row.errors[0].name, 'publisher__headquarter')
+            self.assertEqual(
+                row.errors[0].message, 'osaka, Japan is not in choices.')

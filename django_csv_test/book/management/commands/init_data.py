@@ -2,7 +2,7 @@ import random
 from django.contrib.auth import get_user_model
 from django.core.management import BaseCommand
 
-from book.models import Author, Book
+from book.models import Author, Book, Publisher
 from book.tests.factories import AuthorFactory, BookFactory
 
 
@@ -15,6 +15,7 @@ class Command(BaseCommand):
 
         Author.objects.all().delete()
         Book.objects.all().delete()
+        Publisher.objects.all().delete()
 
         AuthorFactory.create_batch(10)
         author_list = list(Author.objects.all())

@@ -29,7 +29,7 @@ class ViewTest(TestCase):
         self.assertEqual(Publisher.objects.count(), 0)
 
         with open(TEST_DATA_DIR / 'book.csv', 'br') as f:
-            resp = self.client.post(self.url, {'file': f})
+            resp = self.client.post(self.url, {'file': f, 'only_exists': False})
         self.assertRedirects(resp, expected_url=self.redirect_to)
 
         self.assertEqual(Book.objects.count(), 50)
@@ -40,7 +40,7 @@ class ViewTest(TestCase):
         self.assertEqual(Publisher.objects.count(), 0)
 
         with open(TEST_DATA_DIR / 'book.tsv', 'br') as f:
-            resp = self.client.post(self.url, {'file': f})
+            resp = self.client.post(self.url, {'file': f, 'only_exists': False})
         self.assertRedirects(resp, expected_url=self.redirect_to)
 
         self.assertEqual(Book.objects.count(), 50)
@@ -51,7 +51,7 @@ class ViewTest(TestCase):
         self.assertEqual(Publisher.objects.count(), 0)
 
         with open(TEST_DATA_DIR / 'book.xlsx', 'br') as f:
-            resp = self.client.post(self.url, {'file': f})
+            resp = self.client.post(self.url, {'file': f, 'only_exists': False})
         self.assertRedirects(resp, expected_url=self.redirect_to)
 
         self.assertEqual(Book.objects.count(), 50)
@@ -62,7 +62,7 @@ class ViewTest(TestCase):
         self.assertEqual(Publisher.objects.count(), 0)
 
         with open(TEST_DATA_DIR / 'book.xls', 'br') as f:
-            resp = self.client.post(self.url, {'file': f})
+            resp = self.client.post(self.url, {'file': f, 'only_exists': False})
         self.assertRedirects(resp, expected_url=self.redirect_to)
 
         self.assertEqual(Book.objects.count(), 50)

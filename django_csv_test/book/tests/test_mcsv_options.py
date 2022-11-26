@@ -1,7 +1,7 @@
 from django.test import TestCase
 
 from book.models import Book
-from django_csv.mcsv.metaclasses import ModelOptions
+from django_csv.model_csv.csv.metaclasses import ModelOptions
 
 
 class ModelCsvOptionTest(TestCase):

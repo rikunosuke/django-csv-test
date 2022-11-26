@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from book.mcsv import PublisherCsv, BookWithPublisherCsv
 from book.models import Book, Publisher
-from django_csv.admin.mixins import ModelCsvAdminMixin
+from django_csv.model_csv.admin import ModelCsvAdminMixin
 
 
 @admin.register(Book)

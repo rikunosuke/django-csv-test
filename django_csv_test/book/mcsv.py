@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 
-from django_csv import ModelCsv, columns
+from django_csv.model_csv import ModelCsv, columns, ValidationError
 from book.models import Book, Publisher
 
 User = get_user_model()
@@ -33,6 +33,19 @@ class PublisherCsv(ModelCsv):
         user, _ = User.objects.get_or_create(username=values['registered_by'])
         return user
 
+    def get_publisher(self, values: dict, static: dict, **kwargs) -> Publisher:
+        """
+        callback method when used as a part.
+        """
+        values = self.remove_extra_values(values)
+        if not static.get('only_exists'):
+            return Publisher.objects.get_or_create(**values)[0]
+
+        try:
+            return Publisher.objects.get(**values)
+        except (Publisher.DoesNotExist, Publisher.MultipleObjectsReturned) as e:
+            raise ValidationError(str(e), label='Publisher', column_index=0)
+
 
 class BookCsv(ModelCsv):
 
@@ -43,7 +56,7 @@ class BookCsv(ModelCsv):
 
 class BookWithPublisherCsv(ModelCsv):
     pbl = PublisherCsv.as_part(
-        field_name='publisher', callback='get_or_create_object'
+        related_name='publisher', callback='get_publisher'
     )
 
     pbl_name = pbl.AttributeColumn(header='Publisher', attr_name='name')
@@ -52,7 +65,7 @@ class BookWithPublisherCsv(ModelCsv):
     pbl_city = pbl.MethodColumn(
         header='City', method_suffix='city', value_name='city')
     pbl_registered_by = pbl.MethodColumn(
-        header='Registered BY', method_suffix='registered_by',
+        header='Registered By', method_suffix='registered_by',
         value_name='registered_by'
     )
 

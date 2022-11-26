@@ -1,12 +1,41 @@
 {% extends 'admin/base_site.html' %}
+
 {% block content %}
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     <table class="table">
       {{ form.as_table }}
     </table>
-      <div class="submit-row">
-        <input type="submit" class="default" value="submit">
-      </div>
+    <div class="submit-row">
+      <input type="submit" class="default" value="submit">
+    </div>
   </form>
+  {% if rows %}
+    <table>
+      <thead>
+        <tr>
+          <td>Row Number</td>
+          <td>Name</td>
+          <td>Label</td>
+          <td>Column Index</td>
+          <td>Error Message</td>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% if not row.is_valid %}
+            {% for error in row.errors %}
+              <tr>
+                <td>{{ error.row_number }}</td>
+                <td>{{ error.name }}</td>
+                <td>{{ error.label }}</td>
+                <td>{{ error.column_index }}</td>
+                <td>{{ error.message }}</td>
+              </tr>
+            {% endfor %}
+          {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
 {% endblock %}

@@ -12,6 +12,14 @@ class Publisher(models.Model):
     def __str__(self):
         return self.name
 
+    @property
+    def city(self) -> str:
+        return self.headquarter.split(',')[0].strip()
+
+    @property
+    def country(self) -> str:
+        return self.headquarter.split(',')[1].strip()
+
 
 class Author(models.Model):
     name = models.CharField(max_length=100)
