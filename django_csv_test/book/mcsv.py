@@ -27,7 +27,7 @@ class PublisherCsv(ModelCsv):
         return instance.registered_by.username
 
     def field_headquarter(self, values: dict, **kwargs) -> dict:
-        return values['country'] + ',' + values['city']
+        return values['city'].strip() + ', ' + values['country'].strip()
 
     def field_registered_by(self, values: dict, **kwargs):
         user, _ = User.objects.get_or_create(username=values['registered_by'])
