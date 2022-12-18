@@ -1,7 +1,6 @@
-from django.contrib.auth import get_user_model
-
-from django_csv.model_csv import ModelCsv, columns, ValidationError
 from book.models import Book, Publisher
+from django.contrib.auth import get_user_model
+from django_csv.model_csv import ModelCsv, ValidationError, columns
 
 User = get_user_model()
 
@@ -27,7 +26,12 @@ class PublisherCsv(ModelCsv):
         return instance.registered_by.username
 
     def field_headquarter(self, values: dict, **kwargs) -> dict:
-        return values['city'].strip() + ', ' + values['country'].strip()
+        city = values['city']
+        country = values['country']
+        if not city or not country:
+            raise ValidationError('`City` and `Country` are required', label='Headquarter')
+
+        return city + ', ' + country
 
     def field_registered_by(self, values: dict, **kwargs):
         user, _ = User.objects.get_or_create(username=values['registered_by'])
