@@ -7,15 +7,15 @@ from django.test import TestCase
 
 from book.models import Book, Author, Publisher
 from book.tests.factories import AuthorFactory, BookFactory
-from django_csv.model_csv import ModelCsv, ValidationError
+from django_csv.model_csv import ValidationError
 from django_csv.model_csv import columns
 from django_csv.model_csv.columns import ColumnValidationError
-
+from django_csv.model_csv.csv.django import DjangoCsv
 
 User = get_user_model()
 
 
-class ModelCsvForWriteTest(TestCase):
+class DjangoCsvForWriteTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         User.objects.create_user(username='admin', password='password')
@@ -30,7 +30,7 @@ class ModelCsvForWriteTest(TestCase):
         self.all_queryset = Book.objects.order_by('id').all()
 
     def test_model_csv_default_use(self):
-        class BookCsv(ModelCsv):
+        class BookCsv(DjangoCsv):
             class Meta:
                 model = Book
                 fields = '__all__'
@@ -69,7 +69,7 @@ class ModelCsvForWriteTest(TestCase):
                 self.assertEqual(val, row[x])
 
     def test_headers(self):
-        class BookCsv(ModelCsv):
+        class BookCsv(DjangoCsv):
             class Meta:
                 model = Book
                 fields = ['title', 'price']
@@ -80,7 +80,7 @@ class ModelCsvForWriteTest(TestCase):
         self.assertEqual(headers, ['Book Title', 'Book Price'])
 
     def test_customize_column(self):
-        class CustomizeBookCsv(ModelCsv):
+        class CustomizeBookCsv(DjangoCsv):
             pk = columns.AttributeColumn(header='primary key')
             is_on_sale = columns.AttributeColumn(header='now on sale', to=bool)
             title = columns.AttributeColumn(header='custom title')
@@ -99,7 +99,7 @@ class ModelCsvForWriteTest(TestCase):
                 row, [str(obj.pk), 'yes' if obj.is_on_sale else 'no', obj.title])
 
     def test_override_model_csv(self):
-        class OnlyTitleBookCsv(ModelCsv):
+        class OnlyTitleBookCsv(DjangoCsv):
             title = columns.AttributeColumn(header='custom title')
 
             class Meta:
@@ -151,7 +151,7 @@ class ModelCsvForWriteTest(TestCase):
                 row, ['yes' if obj.is_on_sale else 'no', str(obj.price), obj.title])
 
     def test_foreign_key_only_write(self):
-        class BookCsv(ModelCsv):
+        class BookCsv(DjangoCsv):
             title = columns.AttributeColumn()
             publisher__name = columns.AttributeColumn()
             publisher__headquarter = columns.AttributeColumn()
@@ -170,7 +170,7 @@ class ModelCsvForWriteTest(TestCase):
                 )
 
     def test_part_default_use(self, **kwargs):
-        class PublisherCsv(ModelCsv):
+        class PublisherCsv(DjangoCsv):
 
             class Meta:
                 model = Publisher
@@ -184,7 +184,7 @@ class ModelCsvForWriteTest(TestCase):
             def field_headquarter(self, values: dict, **kwargs) -> str:
                 return values['city'] + ',' + values['country']
 
-        class BookCsv(ModelCsv):
+        class BookCsv(DjangoCsv):
             title = columns.AttributeColumn()
 
             prt = PublisherCsv.as_part(related_name='publisher')
@@ -220,11 +220,11 @@ class ModelCsvForWriteTest(TestCase):
         self.assertEqual(pbl_cnt, Publisher.objects.count())
 
     def test_part_column_validation(self):
-        class PublisherCsv(ModelCsv):
+        class PublisherCsv(DjangoCsv):
             class Meta:
                 model = Publisher
 
-        class MethodColumnInvalidCsv(ModelCsv):
+        class MethodColumnInvalidCsv(DjangoCsv):
             part = PublisherCsv.as_part(related_name='publisher')
             pbl_name = part.AttributeColumn(attr_name='name')
             pbl_country = part.MethodColumn()  # ColumnValidationError
@@ -239,7 +239,7 @@ class ModelCsvForWriteTest(TestCase):
         with self.assertRaises(ColumnValidationError):
             MethodColumnInvalidCsv.for_write(instances=self.all_queryset)
 
-        class MethodColumnValidCsv(ModelCsv):
+        class MethodColumnValidCsv(DjangoCsv):
             part = PublisherCsv.as_part(related_name='publisher')
             pbl_name = part.AttributeColumn(attr_name='name')
             pbl_count = part.MethodColumn(
@@ -261,7 +261,7 @@ class ModelCsvForWriteTest(TestCase):
             self.fail(
                 '`ColumnValidationError` is raised unexpectedly. ' + str(e))
 
-        class StaticColumnInvalidCsv(ModelCsv):
+        class StaticColumnInvalidCsv(DjangoCsv):
             part = PublisherCsv.as_part(related_name='publisher')
             pbl_name = part.AttributeColumn(attr_name='name')
             pbl_created_by = part.StaticColumn()
@@ -278,7 +278,7 @@ class ModelCsvForWriteTest(TestCase):
         except ColumnValidationError as e:
             self.fail('`ColumnValidationError` is raised unexpectedly. ' + str(e))
 
-        class StaticColumnValidCsv(ModelCsv):
+        class StaticColumnValidCsv(DjangoCsv):
             part = PublisherCsv.as_part(related_name='publisher')
             pbl_name = part.AttributeColumn(attr_name='name')
             pbl_created_by = part.StaticColumn(value_name='created_by')
@@ -300,7 +300,7 @@ class ModelCsvForWriteTest(TestCase):
                 '`ColumnValidationError` is raised unexpectedly. ' + str(e))
 
     def test_method_suffix(self):
-        class PublisherPart(ModelCsv):
+        class PublisherPart(DjangoCsv):
             class Meta:
                 model = Publisher
 
@@ -311,7 +311,7 @@ class ModelCsvForWriteTest(TestCase):
             def column_suffix(self, instance: Publisher, **kwargs):
                 return 'suffix:' + instance.name
 
-        class BookCsv(ModelCsv):
+        class BookCsv(DjangoCsv):
             book_name = columns.AttributeColumn(attr_name='name')
             # columns which have same attr_name ↑↓ does not cause conflict.
             part = PublisherPart.as_part(related_name='publisher')
@@ -336,7 +336,7 @@ class ModelCsvForWriteTest(TestCase):
     def test_tz_meta_option(self):
         settings.TIME_ZONE = 'Asia/Tokyo'
 
-        class JSTTimeZoneCsv(ModelCsv):
+        class JSTTimeZoneCsv(DjangoCsv):
             class Meta:
                 model = Book
                 fields = ['created_at']
@@ -359,7 +359,7 @@ class ModelCsvForWriteTest(TestCase):
             row['created_at'], datetime(2022, 9, 30, 15, tzinfo=timezone.utc)
         )
 
-        class UTCTimeZoneCsv(ModelCsv):
+        class UTCTimeZoneCsv(DjangoCsv):
             class Meta:
                 model = Book
                 fields = ['created_at']
@@ -381,7 +381,7 @@ class ModelCsvForWriteTest(TestCase):
         )
 
     def test_decorator(self):
-        class PublisherCsv(ModelCsv):
+        class PublisherCsv(DjangoCsv):
             pk = columns.AttributeColumn(header='id', attr_name='id')
             name = columns.AttributeColumn(header='Publisher Name')
 
@@ -430,7 +430,7 @@ class ModelCsvForWriteTest(TestCase):
         class MustNotBeRaisedError(Exception):
             pass
 
-        class PublisherCsv(ModelCsv):
+        class PublisherCsv(DjangoCsv):
             class Meta:
                 model = Publisher
 
@@ -445,7 +445,7 @@ class ModelCsvForWriteTest(TestCase):
                     raise MustNotBeRaisedError('`field` must not be called')
                 return values
 
-        class BookCsv(ModelCsv):
+        class BookCsv(DjangoCsv):
             prt = PublisherCsv.as_part(related_name='publisher')
             prt_name = prt.AttributeColumn(attr_name='name')
             prt_city = prt.MethodColumn(value_name='city')

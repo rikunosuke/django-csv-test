@@ -1,11 +1,12 @@
 from book.models import Book, Publisher
 from django.contrib.auth import get_user_model
-from django_csv.model_csv import ModelCsv, ValidationError, columns
+from django_csv.model_csv import ValidationError, columns
+from django_csv.model_csv.csv.django import DjangoCsv
 
 User = get_user_model()
 
 
-class PublisherCsv(ModelCsv):
+class PublisherCsv(DjangoCsv):
     pk = columns.AttributeColumn(header='id', attr_name='id')
     name = columns.AttributeColumn(header='Publisher Name')
     country = columns.MethodColumn(header='Country')
@@ -17,17 +18,17 @@ class PublisherCsv(ModelCsv):
         auto_assign = True
 
     def column_country(self, instance: Publisher, **kwargs) -> str:
-        return instance.headquarter.split(',')[1]
+        return instance.headquarter.split(',')[1].strip()
 
     def column_city(self, instance: Publisher, **kwargs) -> str:
-        return instance.headquarter.split(',')[0]
+        return instance.headquarter.split(',')[0].strip()
 
     def column_registered_by(self, instance: Publisher, **kwargs) -> str:
         return instance.registered_by.username
 
     def field_headquarter(self, values: dict, **kwargs) -> dict:
-        city = values['city']
-        country = values['country']
+        city = values['city'].strip()
+        country = values['country'].strip()
         if not city or not country:
             raise ValidationError('`City` and `Country` are required', label='Headquarter')
 
@@ -51,14 +52,14 @@ class PublisherCsv(ModelCsv):
             raise ValidationError(str(e), label='Publisher', column_index=0)
 
 
-class BookCsv(ModelCsv):
+class BookCsv(DjangoCsv):
 
     class Meta:
         model = Book
         fields = '__all__'
 
 
-class BookWithPublisherCsv(ModelCsv):
+class BookWithPublisherCsv(DjangoCsv):
     pbl = PublisherCsv.as_part(
         related_name='publisher', callback='get_publisher'
     )

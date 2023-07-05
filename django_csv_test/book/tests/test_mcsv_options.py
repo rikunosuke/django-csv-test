@@ -1,13 +1,13 @@
 from django.test import TestCase
 
 from book.models import Book
-from django_csv.model_csv.csv.metaclasses import ModelOptions
+from django_csv.model_csv.csv.django.metaclasses import DjangoOptions
 
 
 class ModelCsvOptionTest(TestCase):
     def test_model_csv_options(self):
         meta = type('Meta', (), {'model': Book, 'fields': '__all__'})
-        opt = ModelOptions(meta=meta, columns={}, parts=[])
+        opt = DjangoOptions(meta=meta, columns={}, parts=[])
         self.assertEqual(len(opt.columns), 6)
         self.assertSetEqual(
             set(col.get_w_index(original=True) for col in opt.columns),
@@ -29,7 +29,7 @@ class ModelCsvOptionTest(TestCase):
                 self.assertEqual(col.get_w_index(original=True), i)
                 self.assertEqual(col.get_w_index(), i)
 
-        # ModelOptions for Part does not have columns.
+        # DjangoOptions for Part does not have columns.
         part_meta = type('Meta', (), {'model': Book, 'as_part': True})
-        part_opt = ModelOptions(meta=part_meta, columns={}, parts=[])
+        part_opt = DjangoOptions(meta=part_meta, columns={}, parts=[])
         self.assertEqual(len(part_opt.columns), 0)

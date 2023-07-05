@@ -1,0 +1,3 @@
+[submodule "django_csv_test/django_csv"]
+	path = django_csv_test/django_csv
+	url = git@github.com:rikunosuke/django-csv.git
